@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	userIDlist []string
+	userIDlist  []string
 	deadUserMap map[string]bool
-	Token string
+	Token       string
 )
 
 func init() {
@@ -44,7 +44,6 @@ func main() {
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	const howToUse = "```\n* =자동참가\n현재 음성 채널에 있는 모든 사용자를 참가시킵니다.\n참가된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받습니다.\n\n* =참가 @태그\n특정 사용자를 참가시킵니다.\n참가된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받습니다.\n\n* =나감 @태그\n특정 사용자를 참가 해제시킵니다.\n참가 해제된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받지 않습니다.\n\n* =사용종료\n모든 사용자를 참가 해제시킵니다.\n\n* =뒤짐 @태그\n특정 사용자를 뒤짐 상태로 바꿉니다.\n뒤짐 상태의 사용자는 =다켬 명령어의 영향을 받지 않습니다.\n=다끔 명령어에는 영향을 받습니다.\n\n* =살림 @태그\n뒤짐 상태의 특정 사용자를 살림 상태로 바꿉니다.\n살림 상태의 사용자는 =다켬/=다끔 명령어의 영향을 받습니다..\n\n* =새게임\n모든 사용자를 살림 상태로 바꿉니다.\n\n* =끔 @태그\n특정 사용자의 마이크를 뮤트합니다.\n\n* =켬 @태그\n특정 사용자의 마이크를 뮤트 해제합니다.\n\nmade by 2km```"
 
-
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
@@ -58,6 +57,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			if member != nil {
 				s.GuildMemberMute(m.GuildID, user.ID, true)
 			}
+			s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 뮤트했습니다.")
 		}
 	}
 	// =켬 @태그 로 특정 유저 뮤트 해제
@@ -67,19 +67,20 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			if member != nil {
 				s.GuildMemberMute(m.GuildID, user.ID, false)
 			}
+			s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 뮤트 해제했습니다.")
 		}
 	}
 	// =자동참가 로 현재 채널 인원 전체 참가
 	if strings.HasPrefix(m.Content, "=자동참가") {
 		g, _ := s.Guild(m.GuildID)
-		voiceList := g.VoiceStates
-		for _, item := range voiceList {
-			fmt.Println(item.ChannelID)
-			userIDlist = append(userIDlist, item.UserID)
+		vList := g.VoiceStates
+		for _, vState := range vList {
+			userIDlist = append(userIDlist, vState.UserID)
 		}
 	}
 	// 현재 참가 인원 출력
 	if strings.HasPrefix(m.Content, "=현재인원") {
+		s.ChannelMessageSend(m.ChannelID, "현재인원은 다음과 같습니다.")
 		for _, user := range userIDlist {
 			member, _ := s.State.Member(m.GuildID, user)
 			s.ChannelMessageSend(m.ChannelID, member.Mention())
@@ -103,6 +104,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			}
 			if index != -1 {
 				userIDlist = append(userIDlist[:index], userIDlist[index+1:]...)
+				s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 내보냈습니다.")
 			}
 		}
 	}
@@ -110,6 +112,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if strings.HasPrefix(m.Content, "=뒤짐") {
 		for _, user := range m.Mentions {
 			deadUserMap[user.ID] = true
+			s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 죽였습니다.")
 		}
 	}
 	// 죽은 유저 리스트 초기화
@@ -122,6 +125,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			if deadUserMap[user.ID] {
 				deadUserMap[user.ID] = false
 			}
+			s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 살렸습니다.")
 		}
 	}
 	// 등록되어있고 살아있는 유저 뮤트 해제
@@ -134,6 +138,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				}
 			}
 		}
+		s.ChannelMessageSend(m.ChannelID, "모두 뮤트 해제하였습니다.")
 	}
 	// 등록된 모든 유저 뮤트
 	if strings.HasPrefix(m.Content, "=다끔") {
@@ -143,5 +148,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				s.GuildMemberMute(m.GuildID, userid, true)
 			}
 		}
+		s.ChannelMessageSend(m.ChannelID, "모두 뮤트하였습니다.")
 	}
 }
