@@ -75,16 +75,26 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		g, _ := s.Guild(m.GuildID)
 		vList := g.VoiceStates
 		for _, vState := range vList {
+			fmt.Println(vState.UserID)
 			userIDlist = append(userIDlist, vState.UserID)
 		}
 	}
 	// 현재 참가 인원 출력
 	if strings.HasPrefix(m.Content, "=현재인원") {
-		s.ChannelMessageSend(m.ChannelID, "현재인원은 다음과 같습니다.")
+		if userIDlist != nil {
+			s.ChannelMessageSend(m.ChannelID, "현재인원은 다음과 같습니다.")
+		} else {
+			s.ChannelMessageSend(m.ChannelID, "현재 아무도 참가되지 않았습니다.")
+		}
 		for _, user := range userIDlist {
 			member, _ := s.State.Member(m.GuildID, user)
-			s.ChannelMessageSend(m.ChannelID, member.Mention())
+			if member != nil {
+				s.ChannelMessageSend(m.ChannelID, member.Mention())
+			}
 		}
+	}
+	if strings.HasPrefix(m.Content, "=사용종료") {
+		userIDlist = nil
 	}
 	// =참가 @태그 로 인원 참가
 	if strings.HasPrefix(m.Content, "=참가") {
