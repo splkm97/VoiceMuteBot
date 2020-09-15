@@ -12,12 +12,13 @@ import (
 )
 
 var (
-	userIDlist  []string
+	userIDmap   map[string]bool
 	deadUserMap map[string]bool
 	Token       string
 )
 
 func init() {
+	userIDmap = make(map[string]bool, 100)
 	deadUserMap = make(map[string]bool, 100)
 	flag.StringVar(&Token, "t", "NzQ5NTM2Mzg4NDI0MTM4Nzgy.X0taKA.Eg8o1Swg4hfSui7tsXA8HUNOSwo", "Bot Token")
 	flag.Parse()
@@ -29,6 +30,7 @@ func main() {
 		fmt.Println("error creating Discord session,", err)
 		return
 	}
+	dg.AddHandler(voiceStateUpdate)
 	dg.AddHandler(messageCreate)
 	err = dg.Open()
 	if err != nil {
@@ -41,11 +43,30 @@ func main() {
 	<-sc
 	dg.Close()
 }
+
+func voiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
+	member, _ := s.GuildMember(vs.GuildID, vs.UserID)
+	state := ""
+	if vs.ChannelID == "" {
+		state = ": exit from voice channel"
+		delete(userIDmap, vs.UserID)
+	}
+	if vs.ChannelID != "" && !userIDmap[vs.UserID] {
+		state = ": enter to voice channel <chID:" + vs.ChannelID + ">"
+		userIDmap[vs.UserID] = true
+	}
+	fmt.Println(member.Nick + "'s voice state is changed" + state)
+}
+
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	const howToUse = "```\n* =자동참가\n현재 음성 채널에 있는 모든 사용자를 참가시킵니다.\n참가된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받습니다.\n\n* =참가 @태그\n특정 사용자를 참가시킵니다.\n참가된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받습니다.\n\n* =나감 @태그\n특정 사용자를 참가 해제시킵니다.\n참가 해제된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받지 않습니다.\n\n* =사용종료\n모든 사용자를 참가 해제시킵니다.\n\n* =뒤짐 @태그\n특정 사용자를 뒤짐 상태로 바꿉니다.\n뒤짐 상태의 사용자는 =다켬 명령어의 영향을 받지 않습니다.\n=다끔 명령어에는 영향을 받습니다.\n\n* =살림 @태그\n뒤짐 상태의 특정 사용자를 살림 상태로 바꿉니다.\n살림 상태의 사용자는 =다켬/=다끔 명령어의 영향을 받습니다..\n\n* =새게임\n모든 사용자를 살림 상태로 바꿉니다.\n\n* =끔 @태그\n특정 사용자의 마이크를 뮤트합니다.\n\n* =켬 @태그\n특정 사용자의 마이크를 뮤트 해제합니다.\n\nmade by 2km```"
+	const howToUse = "```\n* =현재인원\n현재 참가 상태인 인원을 출력합니다.\n\n* =참가 @태그\n특정 사용자를 참가시킵니다.\n참가된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받습니다.\n\n* =나감 @태그\n특정 사용자를 참가 해제시킵니다.\n참가 해제된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받지 않습니다.\n\n* =사용종료\n모든 사용자를 참가 해제시킵니다.\n\n* =뒤짐 @태그\n특정 사용자를 뒤짐 상태로 바꿉니다.\n뒤짐 상태의 사용자는 =다켬 명령어의 영향을 받지 않습니다.\n=다끔 명령어에는 영향을 받습니다.\n\n* =살림 @태그\n뒤짐 상태의 특정 사용자를 살림 상태로 바꿉니다.\n살림 상태의 사용자는 =다켬/=다끔 명령어의 영향을 받습니다..\n\n* =새게임\n모든 사용자를 살림 상태로 바꿉니다.\n\n* =끔 @태그\n특정 사용자의 마이크를 뮤트합니다.\n\n* =켬 @태그\n특정 사용자의 마이크를 뮤트 해제합니다.\n\nmade by 2km```"
 
 	if m.Author.ID == s.State.User.ID {
 		return
+	}
+	if m.Content == "=길드 초기화" {
+		m.GuildID = m.GuildID
+		s.RequestGuildMembers(m.GuildID, "", 100, true)
 	}
 	if m.Content == "=명령어" {
 		s.ChannelMessageSend(m.ChannelID, howToUse)
@@ -58,20 +79,12 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if strings.HasPrefix(m.Content, "=켬") {
 		unMuteByMention(s, m)
 	}
-	// =자동참가 로 현재 채널 인원 전체 참가
-	if m.Content == "=자동참가" {
-		autoParticipate(s, m)
-	}
 	// 현재 참가 인원 출력
 	if strings.HasPrefix(m.Content, "=현재인원") {
 		sendCurParticipants(s, m)
 	}
 	if strings.HasPrefix(m.Content, "=사용종료") {
 		finishUse()
-	}
-	// =참가 @태그 로 인원 참가
-	if strings.HasPrefix(m.Content, "=참가") {
-		participateByMention(m)
 	}
 	// =나감 @태그 로 인원 나감
 	if strings.HasPrefix(m.Content, "=나감") {
@@ -100,21 +113,21 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func muteAll(s *discordgo.Session, m *discordgo.MessageCreate) {
-	for _, userid := range userIDlist {
-		member, _ := s.State.Member(m.GuildID, userid)
+	for userID, _ := range userIDmap {
+		member, _ := s.State.Member(m.GuildID, userID)
 		if member != nil {
-			s.GuildMemberMute(m.GuildID, userid, true)
+			s.GuildMemberMute(m.GuildID, userID, true)
 		}
 	}
 	s.ChannelMessageSend(m.ChannelID, "모두 뮤트하였습니다.")
 }
 
 func unMuteAll(s *discordgo.Session, m *discordgo.MessageCreate) {
-	for _, userid := range userIDlist {
-		if !deadUserMap[userid] {
-			member, _ := s.State.Member(m.GuildID, userid)
+	for userID, _ := range userIDmap {
+		if !deadUserMap[userID] {
+			member, _ := s.State.Member(m.GuildID, userID)
 			if member != nil {
-				s.GuildMemberMute(m.GuildID, userid, false)
+				s.GuildMemberMute(m.GuildID, userID, false)
 			}
 		}
 	}
@@ -143,15 +156,9 @@ func deadByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func unParticipateByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 	for _, user := range m.Mentions {
-		index := -1
 		id := user.ID
-		for i, listedUser := range userIDlist {
-			if id == listedUser {
-				index = i
-			}
-		}
-		if index != -1 {
-			userIDlist = append(userIDlist[:index], userIDlist[index+1:]...)
+		if userIDmap[id] {
+			delete(userIDmap, id)
 			s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 내보냈습니다.")
 		}
 	}
@@ -159,34 +166,25 @@ func unParticipateByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func participateByMention(m *discordgo.MessageCreate) {
 	for _, user := range m.Mentions {
-		userIDlist = append(userIDlist, user.ID)
+		userIDmap[user.ID] = true
 	}
 }
 
 func finishUse() {
-	userIDlist = nil
+	userIDmap = nil
 }
 
 func sendCurParticipants(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if userIDlist != nil {
+	if userIDmap != nil {
 		s.ChannelMessageSend(m.ChannelID, "현재인원은 다음과 같습니다.")
 	} else {
 		s.ChannelMessageSend(m.ChannelID, "현재 아무도 참가되지 않았습니다.")
 	}
-	for _, user := range userIDlist {
+	for user, _ := range userIDmap {
 		member, _ := s.State.Member(m.GuildID, user)
 		if member != nil {
 			s.ChannelMessageSend(m.ChannelID, member.Mention())
 		}
-	}
-}
-
-func autoParticipate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	g, _ := s.Guild(m.GuildID)
-	vList := g.VoiceStates
-	for _, vState := range vList {
-		fmt.Println(vState.UserID)
-		userIDlist = append(userIDlist, vState.UserID)
 	}
 }
 
@@ -202,7 +200,8 @@ func muteByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func unMuteByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 	for _, user := range m.Mentions {
-		member, _ := s.State.Member(m.GuildID, user.ID)
+		member, err := s.State.Member(m.GuildID, user.ID)
+		fmt.Println(err)
 		if member != nil {
 			s.GuildMemberMute(m.GuildID, user.ID, false)
 		}
