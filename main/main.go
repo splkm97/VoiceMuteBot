@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"strings"
@@ -17,11 +18,17 @@ type UserList struct {
 }
 
 var (
+	howToUse string
 	userList map[string]UserList
 	Token    string
 )
 
 func init() {
+	dat, err := ioutil.ReadFile("usage.txt")
+	if err != nil {
+		panic(err)
+	}
+	howToUse = string(dat)
 	userList = make(map[string]UserList)
 	flag.StringVar(&Token, "t", "NzQ5NTM2Mzg4NDI0MTM4Nzgy.X0taKA.Eg8o1Swg4hfSui7tsXA8HUNOSwo", "Bot Token")
 	flag.Parse()
@@ -60,8 +67,6 @@ func voiceStateUpdate(_ *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	const howToUse = "```\n* =현재인원\n현재 참가 상태인 인원을 출력합니다.\n\n* =다끔\n모든 참가된 사용자를 뮤트시킵니다.\n\n* =다켬\n뒤짐 상태의 사용자를 제외한 모든 사용자를 뮤트시킵니다.\n\n* =뒤짐 @태그\n특정 사용자를 뒤짐 상태로 바꿉니다.\n뒤짐 상태의 사용자는 =다켬 명령어의 영향을 받지 않습니다.\n=다끔 명령어에는 영향을 받습니다.\n\n* =살림 @태그\n뒤짐 상태의 특정 사용자를 살림 상태로 바꿉니다.\n살림 상태의 사용자는 =다켬/=다끔 명령어의 영향을 받습니다..\n\n* =새게임\n모든 사용자를 살림 상태로 바꿉니다.\n\n* =끔 @태그\n특정 사용자의 마이크를 뮤트합니다.\n\n* =켬 @태그\n특정 사용자의 마이크를 뮤트 해제합니다.\n\nmade by 2km```"
-
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
