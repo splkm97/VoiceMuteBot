@@ -11,15 +11,18 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-var (
+type UserList struct {
 	userIDmap   map[string]bool
 	deadUserMap map[string]bool
-	Token       string
+}
+
+var (
+	userList map[string]UserList
+	Token    string
 )
 
 func init() {
-	userIDmap = make(map[string]bool, 100)
-	deadUserMap = make(map[string]bool, 100)
+	userList = make(map[string]UserList)
 	flag.StringVar(&Token, "t", "NzQ5NTM2Mzg4NDI0MTM4Nzgy.X0taKA.Eg8o1Swg4hfSui7tsXA8HUNOSwo", "Bot Token")
 	flag.Parse()
 }
@@ -44,18 +47,16 @@ func main() {
 	_ = dg.Close()
 }
 
-func voiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
-	member, _ := s.GuildMember(vs.GuildID, vs.UserID)
-	state := ""
+func voiceStateUpdate(_ *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
+	if userList[vs.GuildID].userIDmap == nil || userList[vs.GuildID].deadUserMap == nil {
+		userList[vs.GuildID] = UserList{make(map[string]bool), make(map[string]bool)}
+	}
 	if vs.ChannelID == "" {
-		state = ": exit from voice channel"
-		delete(userIDmap, vs.UserID)
+		delete(userList[vs.GuildID].userIDmap, vs.UserID)
 	}
-	if vs.ChannelID != "" && !userIDmap[vs.UserID] {
-		state = ": enter to voice channel <chID:" + vs.ChannelID + ">"
-		userIDmap[vs.UserID] = true
+	if vs.ChannelID != "" && !userList[vs.GuildID].userIDmap[vs.UserID] {
+		userList[vs.GuildID].userIDmap[vs.UserID] = true
 	}
-	fmt.Println(member.Nick + "'s voice state is changed" + state)
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -79,9 +80,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if strings.HasPrefix(m.Content, "=현재인원") {
 		sendCurParticipants(s, m)
 	}
-	if strings.HasPrefix(m.Content, "=사용종료") {
-		finishUse()
-	}
 	// =나감 @태그 로 인원 나감
 	if strings.HasPrefix(m.Content, "=나감") {
 		unParticipateByMention(s, m)
@@ -92,7 +90,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	// 죽은 유저 리스트 초기화
 	if strings.HasPrefix(m.Content, "=새게임") {
-		restoreAllCorps()
+		restoreAllCorps(s, m)
 	}
 	// 죽은 유저 살리기
 	if strings.HasPrefix(m.Content, "=살림") {
@@ -109,8 +107,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func muteAll(s *discordgo.Session, m *discordgo.MessageCreate) {
-	for userID := range userIDmap {
-		member, _ := s.State.Member(m.GuildID, userID)
+	for userID := range userList[m.GuildID].userIDmap {
+		member, _ := s.GuildMember(m.GuildID, userID)
 		if member != nil {
 			_ = s.GuildMemberMute(m.GuildID, userID, true)
 		}
@@ -119,9 +117,9 @@ func muteAll(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func unMuteAll(s *discordgo.Session, m *discordgo.MessageCreate) {
-	for userID := range userIDmap {
-		if !deadUserMap[userID] {
-			member, _ := s.State.Member(m.GuildID, userID)
+	for userID := range userList[m.GuildID].userIDmap {
+		if !userList[m.GuildID].deadUserMap[userID] {
+			member, _ := s.GuildMember(m.GuildID, userID)
 			if member != nil {
 				_ = s.GuildMemberMute(m.GuildID, userID, false)
 			}
@@ -132,69 +130,77 @@ func unMuteAll(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func restoreByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 	for _, user := range m.Mentions {
-		if deadUserMap[user.ID] {
-			deadUserMap[user.ID] = false
+		if userList[m.GuildID].deadUserMap[user.ID] {
+			userList[m.GuildID].deadUserMap[user.ID] = false
 		}
 		_, _ = s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 살렸습니다.")
 	}
 }
 
-func restoreAllCorps() {
-	deadUserMap = make(map[string]bool, 100)
+func restoreAllCorps(s *discordgo.Session, m *discordgo.MessageCreate) {
+	for member := range userList[m.GuildID].deadUserMap {
+		delete(userList[m.GuildID].deadUserMap, member)
+	}
+	_, _ = s.ChannelMessageSend(m.ChannelID, "모두 살렸습니다.")
 }
 
 func deadByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 	for _, user := range m.Mentions {
-		deadUserMap[user.ID] = true
+		userList[m.GuildID].deadUserMap[user.ID] = true
 		_, _ = s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 죽였습니다.")
 	}
 }
 
 func unParticipateByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
+	msg := ""
 	for _, user := range m.Mentions {
 		id := user.ID
-		if userIDmap[id] {
-			delete(userIDmap, id)
-			_, _ = s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 내보냈습니다.")
+		if userList[m.GuildID].userIDmap[id] {
+			delete(userList[m.GuildID].userIDmap, id)
+			msg += user.Mention() + "을(를) 내보냈습니다.\n"
 		}
+	}
+	if msg != "" {
+		_, _ = s.ChannelMessageSend(m.ChannelID, msg)
 	}
 }
 
-func finishUse() {
-	userIDmap = nil
-}
-
 func sendCurParticipants(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if userIDmap != nil {
+	msg := ""
+	for user := range userList[m.GuildID].userIDmap {
+		member, _ := s.GuildMember(m.GuildID, user)
+		msg += "<" + member.Nick + "> "
+
+	}
+	if len(userList[m.GuildID].userIDmap) != 0 {
 		_, _ = s.ChannelMessageSend(m.ChannelID, "현재인원은 다음과 같습니다.")
 	} else {
 		_, _ = s.ChannelMessageSend(m.ChannelID, "현재 아무도 참가되지 않았습니다.")
 	}
-	for user := range userIDmap {
-		member, _ := s.State.Member(m.GuildID, user)
-		if member != nil {
-			_, _ = s.ChannelMessageSend(m.ChannelID, member.Mention())
-		}
-	}
+	_, _ = s.ChannelMessageSend(m.ChannelID, msg)
 }
 
 func muteByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
+	msg := ""
 	for _, user := range m.Mentions {
-		member, _ := s.State.Member(m.GuildID, user.ID)
-		if member != nil {
+		if user.ID != "" {
 			_ = s.GuildMemberMute(m.GuildID, user.ID, true)
+			msg += user.Mention() + "을(를) 뮤트했습니다.\n"
 		}
-		_, _ = s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 뮤트했습니다.")
 	}
+	_, _ = s.ChannelMessageSend(m.ChannelID, msg)
 }
 
 func unMuteByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
+	msg := ""
 	for _, user := range m.Mentions {
-		member, err := s.State.Member(m.GuildID, user.ID)
+		member, err := s.GuildMember(m.GuildID, user.ID)
 		fmt.Println(err)
 		if member != nil {
 			_ = s.GuildMemberMute(m.GuildID, user.ID, false)
 		}
-		_, _ = s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 뮤트 해제했습니다.")
+		msg += user.Mention() + "을(를) 뮤트 해제했습니다.\n"
 	}
+
+	_, _ = s.ChannelMessageSend(m.ChannelID, msg)
 }
