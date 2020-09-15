@@ -29,8 +29,12 @@ func init() {
 		panic(err)
 	}
 	howToUse = string(dat)
+	dat, err = ioutil.ReadFile("token.txt")
+	if err != nil {
+		panic(err)
+	}
 	userList = make(map[string]UserList)
-	flag.StringVar(&Token, "t", "NzQ5NTM2Mzg4NDI0MTM4Nzgy.X0taKA.Eg8o1Swg4hfSui7tsXA8HUNOSwo", "Bot Token")
+	flag.StringVar(&Token, "t", string(dat), "Bot Token")
 	flag.Parse()
 }
 
