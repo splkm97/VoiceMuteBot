@@ -1,4 +1,4 @@
-# DiscordVoiceMuteBotGolang
+# VoiceMuteBot
 ## 1. 보이스 뮤트봇 소개
 1.1. 제작의도
 > 디스코드를 사용하면서 어몽어스를 플레이하던 중
