@@ -104,22 +104,26 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func muteAll(s *discordgo.Session, m *discordgo.MessageCreate) {
 	for userID := range userList[m.GuildID].userIDmap {
-		member, _ := s.GuildMember(m.GuildID, userID)
-		if member != nil {
-			_ = s.GuildMemberMute(m.GuildID, userID, true)
-		}
+		go func(gid, uid string) {
+			member, _ := s.GuildMember(gid, uid)
+			if member != nil {
+				_ = s.GuildMemberMute(gid, uid, true)
+			}
+		}(m.GuildID, userID)
 	}
 	_, _ = s.ChannelMessageSend(m.ChannelID, "모두 뮤트하였습니다.")
 }
 
 func unMuteAll(s *discordgo.Session, m *discordgo.MessageCreate) {
 	for userID := range userList[m.GuildID].userIDmap {
-		if !userList[m.GuildID].deadUserMap[userID] {
-			member, _ := s.GuildMember(m.GuildID, userID)
-			if member != nil {
-				_ = s.GuildMemberMute(m.GuildID, userID, false)
+		go func(gid, uid string) {
+			if !userList[gid].deadUserMap[uid] {
+				member, _ := s.GuildMember(gid, uid)
+				if member != nil {
+					_ = s.GuildMemberMute(gid, uid, false)
+				}
 			}
-		}
+		}(m.GuildID, userID)
 	}
 	_, _ = s.ChannelMessageSend(m.ChannelID, "모두 뮤트 해제하였습니다.")
 }
@@ -129,7 +133,9 @@ func restoreByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if userList[m.GuildID].deadUserMap[user.ID] {
 			userList[m.GuildID].deadUserMap[user.ID] = false
 		}
-		_, _ = s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 살렸습니다.")
+		go func(cid, msg string) {
+			_, _ = s.ChannelMessageSend(cid, msg)
+		}(m.ChannelID, user.Username+"을(를) 살렸습니다.")
 	}
 }
 
@@ -142,8 +148,10 @@ func restoreAllCorps(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func deadByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 	for _, user := range m.Mentions {
-		userList[m.GuildID].deadUserMap[user.ID] = true
-		_, _ = s.ChannelMessageSend(m.ChannelID, user.Mention()+"을(를) 죽였습니다.")
+		go func(gid, cid, uid, msg string) {
+			userList[gid].deadUserMap[uid] = true
+			_, _ = s.ChannelMessageSend(cid, msg)
+		}(m.GuildID, m.ChannelID, user.ID, user.Mention()+"을(를) 죽였습니다.")
 	}
 }
 
@@ -151,8 +159,7 @@ func sendCurParticipants(s *discordgo.Session, m *discordgo.MessageCreate) {
 	msg := ""
 	for user := range userList[m.GuildID].userIDmap {
 		member, _ := s.GuildMember(m.GuildID, user)
-		msg += "<" + member.Nick + "> "
-
+		msg += "<" + member.User.Username + "> "
 	}
 	if len(userList[m.GuildID].userIDmap) != 0 {
 		_, _ = s.ChannelMessageSend(m.ChannelID, "현재인원은 다음과 같습니다.")
@@ -166,8 +173,10 @@ func muteByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 	msg := ""
 	for _, user := range m.Mentions {
 		if user.ID != "" {
-			_ = s.GuildMemberMute(m.GuildID, user.ID, true)
-			msg += user.Mention() + "을(를) 뮤트했습니다.\n"
+			go func(gid, uid string) {
+				_ = s.GuildMemberMute(gid, uid, true)
+			}(m.GuildID, user.ID)
+			msg += user.Username + "을(를) 뮤트했습니다.\n"
 		}
 	}
 	_, _ = s.ChannelMessageSend(m.ChannelID, msg)
@@ -176,11 +185,13 @@ func muteByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 func unMuteByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 	msg := ""
 	for _, user := range m.Mentions {
-		member, _ := s.GuildMember(m.GuildID, user.ID)
-		if member != nil {
-			_ = s.GuildMemberMute(m.GuildID, user.ID, false)
-		}
-		msg += user.Mention() + "을(를) 뮤트 해제했습니다.\n"
+		go func(gid, uid string) {
+			member, _ := s.GuildMember(gid, uid)
+			if member != nil {
+				_ = s.GuildMemberMute(gid, uid, false)
+			}
+		}(m.GuildID, user.ID)
+		msg += user.Username + "을(를) 뮤트 해제했습니다.\n"
 	}
 
 	_, _ = s.ChannelMessageSend(m.ChannelID, msg)
