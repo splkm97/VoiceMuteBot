@@ -60,7 +60,7 @@ func voiceStateUpdate(_ *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	const howToUse = "```\n* =현재인원\n현재 참가 상태인 인원을 출력합니다.\n\n* =참가 @태그\n특정 사용자를 참가시킵니다.\n참가된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받습니다.\n\n* =나감 @태그\n특정 사용자를 참가 해제시킵니다.\n참가 해제된 사용자의 음성은 =다끔/=다켬 명령어에 영향을 받지 않습니다.\n\n* =사용종료\n모든 사용자를 참가 해제시킵니다.\n\n* =뒤짐 @태그\n특정 사용자를 뒤짐 상태로 바꿉니다.\n뒤짐 상태의 사용자는 =다켬 명령어의 영향을 받지 않습니다.\n=다끔 명령어에는 영향을 받습니다.\n\n* =살림 @태그\n뒤짐 상태의 특정 사용자를 살림 상태로 바꿉니다.\n살림 상태의 사용자는 =다켬/=다끔 명령어의 영향을 받습니다..\n\n* =새게임\n모든 사용자를 살림 상태로 바꿉니다.\n\n* =끔 @태그\n특정 사용자의 마이크를 뮤트합니다.\n\n* =켬 @태그\n특정 사용자의 마이크를 뮤트 해제합니다.\n\nmade by 2km```"
+	const howToUse = "```\n* =현재인원\n현재 참가 상태인 인원을 출력합니다.\n\n* =다끔\n모든 참가된 사용자를 뮤트시킵니다.\n\n* =다켬\n뒤짐 상태의 사용자를 제외한 모든 사용자를 뮤트시킵니다.\n\n* =뒤짐 @태그\n특정 사용자를 뒤짐 상태로 바꿉니다.\n뒤짐 상태의 사용자는 =다켬 명령어의 영향을 받지 않습니다.\n=다끔 명령어에는 영향을 받습니다.\n\n* =살림 @태그\n뒤짐 상태의 특정 사용자를 살림 상태로 바꿉니다.\n살림 상태의 사용자는 =다켬/=다끔 명령어의 영향을 받습니다..\n\n* =새게임\n모든 사용자를 살림 상태로 바꿉니다.\n\n* =끔 @태그\n특정 사용자의 마이크를 뮤트합니다.\n\n* =켬 @태그\n특정 사용자의 마이크를 뮤트 해제합니다.\n\nmade by 2km```"
 
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -79,10 +79,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// 현재 참가 인원 출력
 	if strings.HasPrefix(m.Content, "=현재인원") {
 		sendCurParticipants(s, m)
-	}
-	// =나감 @태그 로 인원 나감
-	if strings.HasPrefix(m.Content, "=나감") {
-		unParticipateByMention(s, m)
 	}
 	// 죽은 유저 리스트 업데이트
 	if strings.HasPrefix(m.Content, "=뒤짐") {
@@ -151,20 +147,6 @@ func deadByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 }
 
-func unParticipateByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
-	msg := ""
-	for _, user := range m.Mentions {
-		id := user.ID
-		if userList[m.GuildID].userIDmap[id] {
-			delete(userList[m.GuildID].userIDmap, id)
-			msg += user.Mention() + "을(를) 내보냈습니다.\n"
-		}
-	}
-	if msg != "" {
-		_, _ = s.ChannelMessageSend(m.ChannelID, msg)
-	}
-}
-
 func sendCurParticipants(s *discordgo.Session, m *discordgo.MessageCreate) {
 	msg := ""
 	for user := range userList[m.GuildID].userIDmap {
@@ -194,8 +176,7 @@ func muteByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 func unMuteByMention(s *discordgo.Session, m *discordgo.MessageCreate) {
 	msg := ""
 	for _, user := range m.Mentions {
-		member, err := s.GuildMember(m.GuildID, user.ID)
-		fmt.Println(err)
+		member, _ := s.GuildMember(m.GuildID, user.ID)
 		if member != nil {
 			_ = s.GuildMemberMute(m.GuildID, user.ID, false)
 		}
